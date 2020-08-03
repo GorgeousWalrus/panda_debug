@@ -1,8 +1,0 @@
-wishbone_tb.sv
-
-../src/wb_xbar.sv
-../src/wb_master.sv
-../src/wb_slave.sv
-dual_ram.sv
-
--I../includes
