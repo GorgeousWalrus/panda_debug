@@ -9,7 +9,7 @@ A debug module for cores
   * Read from wishbone slave
   * Write to wishbone slave
  * Master passes commands to slave debug module and reads back data
-  * Core debug module can
+  * Core debug module (debug slave) can
     * Halt the core
     * Read from register file
     * Write to register file
