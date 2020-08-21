@@ -72,6 +72,9 @@ logic [3:0]   lsu_we;
 logic   lsu_read;
 logic   lsu_write;
 logic   lsu_valid;
+logic [7:0] cmd;
+logic [31:0] addr;
+logic [31:0] data_dbg_dut;
 
 lsu lsu_i(
     .clk        ( clk       ),
@@ -90,6 +93,10 @@ assign lsu_data_i = data_i;
 assign ready_o  = ready_q;
 assign data_o   = data_q;
 
+assign dbg_bus.cmd = cmd;
+assign dbg_bus.addr = addr;
+assign dbg_bus.data_dbg_dut = data_dbg_dut;
+
 always_comb
 begin
   lsu_read  = 1'b0;
@@ -99,9 +106,9 @@ begin
   periph_rst_req_o = 1'b0;
   ready_n   = ready_q;
   data_n    = data_q;
-  dbg_bus.cmd          = 'b0;
-  dbg_bus.addr         = 'b0;
-  dbg_bus.data_dbg_dut = 'b0;
+  cmd          = 'b0;
+  addr         = 'b0;
+  data_dbg_dut = 'b0;
 
   case(cmd_i)
     8'h00: begin // reserved for doing nothing
@@ -146,28 +153,28 @@ begin
 // performed by core dbg module
     8'h11: begin // Halt the core
       ready_n = 1'b0;
-      dbg_bus.cmd = 8'h01;
+      cmd = 8'h01;
       if(dbg_bus.dut_done) begin
-        dbg_bus.cmd = 8'h0;
+        cmd = 8'h0;
         ready_n = 1'b1;
       end
     end
 
     8'h12: begin // Resume the core
       ready_n = 1'b0;
-      dbg_bus.cmd = 8'h02;
+      cmd = 8'h02;
       if(dbg_bus.dut_done) begin
-        dbg_bus.cmd = 8'h0;
+        cmd = 8'h0;
         ready_n = 1'b1;
       end
     end
 
     8'h13: begin // Read register
       ready_n = 1'b0;
-      dbg_bus.cmd = 8'h03;
-      dbg_bus.addr[4:0] = addr_i[4:0];
+      cmd = 8'h03;
+      addr[4:0] = addr_i[4:0];
       if(dbg_bus.dut_done) begin
-        dbg_bus.cmd = 8'h0;
+        cmd = 8'h0;
         data_n = dbg_bus.data_dut_dbg;
         ready_n = 1'b1;
       end
@@ -175,11 +182,11 @@ begin
 
     8'h14: begin // Write register
       ready_n = 1'b0;
-      dbg_bus.cmd = 8'h04;
-      dbg_bus.addr[4:0] = addr_i[4:0];
-      dbg_bus.data_dbg_dut = data_i;
+      cmd = 8'h04;
+      addr[4:0] = addr_i[4:0];
+      data_dbg_dut = data_i;
       if(dbg_bus.dut_done) begin
-        dbg_bus.cmd = 8'h0;
+        cmd = 8'h0;
         ready_n = 1'b1;
       end
     end
@@ -187,9 +194,9 @@ begin
 
     8'h15: begin // Read PC
       ready_n = 1'b0;
-      dbg_bus.cmd = 8'h05;
+      cmd = 8'h05;
       if(dbg_bus.dut_done) begin
-        dbg_bus.cmd = 8'h0;
+        cmd = 8'h0;
         data_n = dbg_bus.data_dut_dbg;
         ready_n = 1'b1;
       end
@@ -197,10 +204,10 @@ begin
 
     8'h16: begin // Write PC
       ready_n = 1'b0;
-      dbg_bus.cmd = 8'h06;
-      dbg_bus.data_dbg_dut = data_i;
+      cmd = 8'h06;
+      data_dbg_dut = data_i;
       if(dbg_bus.dut_done) begin
-        dbg_bus.cmd = 8'h0;
+        cmd = 8'h0;
         ready_n = 1'b1;
       end
     end
