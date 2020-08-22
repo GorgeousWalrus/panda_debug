@@ -16,7 +16,7 @@
 // Functionality: Interface for the debug module
 //
 // ------------------------------------------------------------
-
+/* verilator lint_off MODDUP */
 `ifndef DBG_INTF_SV
 `define DBG_INFT_SV
 
