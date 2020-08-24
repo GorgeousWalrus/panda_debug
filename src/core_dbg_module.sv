@@ -63,9 +63,10 @@ begin
     rd_do         = 'b0;
     rs_o          = 'b0;
     done_n        = 1'b0;
-    tmp_halt_n     = 1'b0;
+    tmp_halt_n    = 1'b0;
     flush_o       = 1'b0;
     pc_o          = 'b0;
+    data_dut_dbg  = 'b0;
 
     case(dbg_bus.cmd)
         8'b0: begin end // Reserverd for no command
