@@ -131,17 +131,17 @@ begin
       end
     end
 
-    8'h05: begin // Reset the core
+    8'h03: begin // Reset the core
       ready_n = 1'b1;
       core_rst_req_o = 1'b1;
     end
 
-    8'h06: begin // Reset the peripherals
+    8'h04: begin // Reset the peripherals
       ready_n = 1'b1;
       periph_rst_req_o = 1'b1;
     end
 
-    8'h07: begin // Reset everything
+    8'h05: begin // Reset everything
       ready_n = 1'b1;
       periph_rst_req_o = 1'b1;
       core_rst_req_o = 1'b1;
