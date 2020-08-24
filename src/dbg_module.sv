@@ -45,8 +45,6 @@
 // TODO:
 //
 // ------------------------------------------------------------
-/* verilator lint_off MODDUP */
-`include "dbg_intf.sv"
 
 module dbg_module(
   input logic               clk,

@@ -29,8 +29,6 @@
 //
 // ------------------------------------------------------------
 
-`include "dbg_intf.sv"
-
 module core_dbg_module(
   input logic               clk,
   input logic               rstn_i,
