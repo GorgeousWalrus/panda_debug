@@ -34,13 +34,6 @@
 `define DBG_ACK 32'h00000001
 `define DBG_END 32'h00000002
 
-`ifndef DBG_INTF_SV
-`include "dbg_intf.sv"
-`endif
-`ifndef WB_INTF_SV
-`include "wb_intf.sv"
-`endif
-
 module dbg_uart_tap#(
   parameter int BAUDRATE = 50000000,
   parameter int CLK_FREQ = 50000000
@@ -113,6 +106,7 @@ begin
     tx_enable   = 1'b0;
     tx_incr_cnt = 1'b0;
     tx_rst_cnt  = 1'b0;
+    tx_data     = 'b0;
 
     rx_incr_cnt = 1'b0;
     rx_rst_cnt  = 1'b0;

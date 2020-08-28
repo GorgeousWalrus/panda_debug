@@ -3,9 +3,9 @@
 // functionality of this code is given.
 // Use this code under your own risk.
 // When using this code, copy this disclaimer at the top of 
-// your file
+// Your file
 //
-// (c) Panda Cores 2020
+// (c) Luca Hanel 2020
 //
 // ------------------------------------------------------------
 //
