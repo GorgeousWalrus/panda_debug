@@ -29,18 +29,18 @@
 // Commands:
 //          Performed by this module:
 //            0x00 : Reserved for doing nothing
-//            0x01 : Read from address
-//            0x02 : write to address
-//            0x03 : reset the core
-//            0x04 : reset peripherals
-//            0x05 : reset core & peripherals
+//            0x01 : reset the core
+//            0x02 : reset peripherals
+//            0x03 : reset core & peripherals
+//            0x80 : Read from address
+//            0xc0 : write to address
 //          Performed by core-dbg-module:
-//            0x11 : halt the core
-//            0x12 : resume the core
-//            0x13 : read register (address field used)
-//            0x14 : write register (address field used)
-//            0x15 : read IF-stage PC
-//            0x16 : set IF-stage PC and flush the pipeline//
+//            0x04 : halt the core
+//            0x05 : resume the core
+//            0x81 : read register (address field used)
+//            0xc1 : write register (address field used)
+//            0x82 : read IF-stage PC
+//            0xc2 : set IF-stage PC and flush the pipeline//
 //
 // TODO:
 //
@@ -113,7 +113,7 @@ begin
     end
 
 // Performed by this dbg module
-    8'h01: begin // Read from address
+    8'h80: begin // Read from address
       lsu_read  = 1'b1;
       ready_n   = 1'b0;
       if(lsu_valid) begin
@@ -122,7 +122,7 @@ begin
       end
     end
 
-    8'h02: begin // Write to address
+    8'hc0: begin // Write to address
       lsu_write = 1'b1;
       lsu_we    = 4'b1111;
       ready_n   = 1'b0;
@@ -131,24 +131,24 @@ begin
       end
     end
 
-    8'h03: begin // Reset the core
+    8'h01: begin // Reset the core
       ready_n = 1'b1;
       core_rst_req_o = 1'b1;
     end
 
-    8'h04: begin // Reset the peripherals
+    8'h02: begin // Reset the peripherals
       ready_n = 1'b1;
       periph_rst_req_o = 1'b1;
     end
 
-    8'h05: begin // Reset everything
+    8'h03: begin // Reset everything
       ready_n = 1'b1;
       periph_rst_req_o = 1'b1;
       core_rst_req_o = 1'b1;
     end
 
 // performed by core dbg module
-    8'h11: begin // Halt the core
+    8'h04: begin // Halt the core
       ready_n = 1'b0;
       cmd = 8'h01;
       if(dbg_bus.dut_done) begin
@@ -157,7 +157,7 @@ begin
       end
     end
 
-    8'h12: begin // Resume the core
+    8'h05: begin // Resume the core
       ready_n = 1'b0;
       cmd = 8'h02;
       if(dbg_bus.dut_done) begin
@@ -166,7 +166,7 @@ begin
       end
     end
 
-    8'h13: begin // Read register
+    8'h81: begin // Read register
       ready_n = 1'b0;
       cmd = 8'h03;
       addr[4:0] = addr_i[4:0];
@@ -177,7 +177,7 @@ begin
       end
     end
 
-    8'h14: begin // Write register
+    8'hc1: begin // Write register
       ready_n = 1'b0;
       cmd = 8'h04;
       addr[4:0] = addr_i[4:0];
@@ -189,7 +189,7 @@ begin
     end
 
 
-    8'h15: begin // Read PC
+    8'h82: begin // Read PC
       ready_n = 1'b0;
       cmd = 8'h05;
       if(dbg_bus.dut_done) begin
@@ -199,7 +199,7 @@ begin
       end
     end
 
-    8'h16: begin // Write PC
+    8'hc2: begin // Write PC
       ready_n = 1'b0;
       cmd = 8'h06;
       data_dbg_dut = data_i;
