@@ -18,7 +18,11 @@
 // ------------------------------------------------------------
 
 module dbg_uart_tap#(
-  parameter int BAUDRATE = 50000000,
+`ifdef RTL_TEST
+  parameter int BAUDRATE = 1000000,
+`else
+  parameter int BAUDRATE = 115200,
+`endif
   parameter int CLK_FREQ = 50000000
   )(
   input logic             clk,
@@ -70,7 +74,7 @@ assign dbg_cmd = (dbg_exec) ? cmd_q : 8'b0;
 
 // UART signals
 // clk div for baudrate
-localparam logic [31:0] INIT_CLK_DIV = 0;
+localparam logic [31:0] INIT_CLK_DIV = CLK_FREQ/BAUDRATE;
 
 // registers
 logic [31:0] uart_regs_n[3:0];
@@ -309,6 +313,7 @@ uart_tx tx_mod_i (
     .tx_data_i  ( tx_data                   ),
     .tx_valid_i ( tx_enable                 ),
     .tx_done_o  ( tx_done                   ),
+    .parity_en_i( 1'b0                      ),
     .tx_o       ( tx_o                      )
 );
 
@@ -320,6 +325,7 @@ uart_rx rx_mod_i (
     .rx_data_o  ( rx_data                   ),
     .rx_valid_o ( rx_valid                  ),
     .rx_err_o   ( rx_parity_err             ),
+    .parity_en_i( 1'b0                      ),
     .rx_i       ( rx_i                      )
 );
 
