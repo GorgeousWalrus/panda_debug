@@ -87,8 +87,8 @@ assign dbg_cmd = (dbg_exec) ? cmd_q : 8'b0;
 localparam logic [31:0] INIT_CLK_DIV = CLK_FREQ/BAUDRATE;
 
 // registers
-logic [31:0] uart_regs_n[3:0];
-logic [31:0] uart_regs_q[3:0];
+logic [31:0] uart_regs_n[4:0];
+logic [31:0] uart_regs_q[4:0];
 
 // TX signals
 logic [7:0]     tx_data;
