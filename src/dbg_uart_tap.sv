@@ -19,7 +19,7 @@
 
 module dbg_uart_tap#(
 `ifdef RTL_TEST
-  parameter int BAUDRATE = 1000000,
+  parameter int BAUDRATE = 10000000,
 `else
   parameter int BAUDRATE = 115200,
 `endif
@@ -57,15 +57,18 @@ localparam RX_FULL = 3;
 localparam RX_ERR = 4;
 
 // DEBUG DEFINES
-localparam DBG_ACK = 32'h00000001;
-localparam DBG_END = 32'h00000002;
+localparam DBG_END = 8'haa;
 
 // DEBUG signals
+logic [2:0]     data_cnt;
+logic           incr_cnt;
+logic           rst_cnt;
 logic           dbg_exec;
 logic           dbg_ready;
 logic [7:0]     cmd_n, cmd_q, dbg_cmd;
 logic [31:0]    addr_n, addr_q;
 logic [31:0]    data_w_n, data_w_q;
+logic [31:0]    dbg_data_n, dbg_data_q;
 logic [31:0]    data_r;
 
 enum logic [2:0] {  IDLE, 
@@ -74,7 +77,7 @@ enum logic [2:0] {  IDLE,
               DATA_READ,
               CMD_EXEC,
               DATA_WRITE,
-              CMD_FINISH
+              CMD_DONE
             } CS, NS;
 
 assign dbg_cmd = (dbg_exec) ? cmd_q : 8'b0;
@@ -88,29 +91,35 @@ logic [31:0] uart_regs_n[3:0];
 logic [31:0] uart_regs_q[3:0];
 
 // TX signals
-logic [1:0]     tx_cnt;
 logic [7:0]     tx_data;
-logic           tx_incr_cnt;
-logic           tx_rst_cnt;
 logic           tx_done;
 logic           tx_enable;
 
 // RX signals
-logic [1:0]     rx_cnt;
 logic [7:0]     rx_data;
-logic           rx_incr_cnt;
-logic           rx_rst_cnt;
 logic           rx_valid;
 logic           rx_parity_err;
+
+// fifo signals
+logic           rx_fifo_read;
+logic           rx_fifo_write_n, rx_fifo_write_q;
+logic [7:0]     rx_data_read;
+logic           rx_empty, rx_full;
+logic           tx_fifo_read;
+logic           tx_fifo_write_n, tx_fifo_write_q;
+logic           tx_empty, tx_full;
 
 always_comb
 begin
     // Debug
-    dbg_exec = 1'b0;
-    NS       = CS;
-    cmd_n    = cmd_q;
-    addr_n   = addr_q;
-    data_w_n = data_w_q;
+    dbg_exec   = 1'b0;
+    NS         = CS;
+    cmd_n      = cmd_q;
+    addr_n     = addr_q;
+    data_w_n   = data_w_q;
+    dbg_data_n = dbg_data_q;
+    incr_cnt   = 1'b0;
+    rst_cnt    = 1'b0;
 
     uart_regs_n = uart_regs_q;
 
@@ -128,23 +137,20 @@ begin
     rx_fifo_write_n = 1'b0;
     uart_regs_n[STATUS][RX_EMPTY] = rx_empty;
     uart_regs_n[STATUS][RX_FULL] = rx_full;
-    uart_regs_n[RX_DATA] = rx_data_read;
+    uart_regs_n[RX_DATA] = {24'b0, rx_data_read};
 
     // UART TX
-    if(uart_regs_q[CTRL][TX_EN] && (!uart_regs_q[STATUS][TX_EMPTY])) begin
+    if(!tx_empty) begin
         tx_enable = 1'b1;
         if(tx_done) begin
             tx_enable = 1'b0;
             // notify fifo that we processed the data
             tx_fifo_read = 1'b1;
-            // If this was the last word in txfifo, disable uart
-            if(uart_regs_q[STATUS][TX_EMPTY])
-                uart_regs_n[CTRL][TX_EN] = 1'b0;
         end
     end
 
     // UART RX
-    if((!uart_regs_q[STATUS][RX_FULL]) && uart_regs_q[CTRL][RX_EN]) begin
+    if(!rx_full) begin
         if(rx_valid) begin
             rx_fifo_write_n = 1'b1;
         end
@@ -153,21 +159,16 @@ begin
     // Debug CTRL
     case(CS)
       IDLE: begin
-        if(uart_regs_q[CTRL][RX_FULL]) begin
+        if(!rx_empty) begin
           // Read the command
-          cmd_n = uart_regs_q[RX_DATA][7:0];
-          uart_regs_n[RX_DATA] = 'b0;
-          uart_regs_n[CTRL][RX_FULL] = 1'b0;
-          // Acknowledge cmd
-          uart_regs_n[CTRL][TX_EN] = 1'b1;
-          uart_regs_n[CTRL][TX_FULL] = 1'b1;
-          uart_regs_n[TX_DATA] = DBG_ACK;
-          // Go to next state
+          cmd_n = rx_data_read;
+          rx_fifo_read = 1'b1;
           NS = CMD_DECODE;
         end
       end
 
       CMD_DECODE: begin
+        rst_cnt = 1'b1;
         // If a memory operation is performed, read address, else execute command
         if(cmd_q[7])
           NS = ADDR_READ;
@@ -178,91 +179,93 @@ begin
       end
 
       ADDR_READ: begin
-        if(uart_regs_q[CTRL][RX_FULL]) begin
+        if(!rx_empty) begin
           // Read address
-          addr_n = uart_regs_q[RX_DATA];
-          uart_regs_n[CTRL][RX_FULL] = 1'b0;
-          uart_regs_n[RX_DATA] = 'b0;
-          // Acknowledge address
-          if(!uart_regs_q[CTRL][TX_FULL]) begin
-            uart_regs_n[CTRL][TX_EN] = 1'b1;
-            uart_regs_n[CTRL][TX_FULL] = 1'b1;
-            uart_regs_n[TX_DATA] = DBG_ACK;
-            // Go to next state
-            // If a write operation is performed, read the data from uart, else execute
-            if(cmd_q[6])
-              NS = DATA_READ;
-            else begin
-              NS = CMD_EXEC;
-              dbg_exec = 1'b1;
-            end
+          if(!data_cnt[2]) begin
+            case(data_cnt[1:0])
+              2'b00: addr_n[7:0]   = rx_data_read;
+              2'b01: addr_n[15:8]  = rx_data_read;
+              2'b10: addr_n[23:16] = rx_data_read;
+              2'b11: addr_n[31:24] = rx_data_read;
+            endcase
+            incr_cnt = 1'b1;
+            rx_fifo_read = 1'b1;
           end
         end
-      end
-
-      DATA_READ: begin
-        if(uart_regs_q[CTRL][RX_FULL]) begin
-          // Read data
-          data_w_n = uart_regs_q[RX_DATA];
-          uart_regs_n[RX_DATA] = 'b0;
-          uart_regs_n[CTRL][RX_FULL] = 1'b0;
-          // Acknowledge data
-          if(!uart_regs_q[CTRL][TX_FULL]) begin
-            uart_regs_n[CTRL][TX_EN] = 1'b1;
-            uart_regs_n[CTRL][TX_FULL] = 1'b1;
-            uart_regs_n[TX_DATA] = DBG_ACK;
-            // Go to next state
+        // Go to next state
+        // If a write operation is performed, read the data from uart, else execute
+        if(data_cnt == 3'b100) begin
+          rst_cnt = 1'b1;
+          if(cmd_q[6])
+            NS = DATA_READ;
+          else begin
             NS = CMD_EXEC;
             dbg_exec = 1'b1;
           end
         end
       end
+      
+      DATA_READ: begin
+        if(!rx_empty) begin
+          // Read address
+          if(!data_cnt[2]) begin
+            case(data_cnt[1:0])
+              2'b00: data_w_n[7:0]   = rx_data_read;
+              2'b01: data_w_n[15:8]  = rx_data_read;
+              2'b10: data_w_n[23:16] = rx_data_read;
+              2'b11: data_w_n[31:24] = rx_data_read;
+            endcase
+            incr_cnt = 1'b1;
+            rx_fifo_read = 1'b1;
+          end
+        end
+        if(data_cnt == 3'b100) begin
+          dbg_exec = 1'b1;
+          NS = CMD_EXEC;
+        end
+      end
 
       CMD_EXEC: begin
+        rst_cnt = 1'b1;
         dbg_exec = 1'b1;
         if(dbg_ready) begin
           dbg_exec = 1'b0;
-          if(!uart_regs_q[CTRL][TX_FULL]) begin
-            if(cmd_q[7] && !cmd_q[6]) begin
-              // write data
-              uart_regs_n[CTRL][TX_EN] = 1'b1;
-              uart_regs_n[CTRL][TX_FULL] = 1'b1;
-              uart_regs_n[TX_DATA] = data_r;
-              // Go to write state
-              NS = DATA_WRITE;
-            end else begin
-              // write data
-              uart_regs_n[CTRL][TX_EN] = 1'b1;
-              uart_regs_n[CTRL][TX_FULL] = 1'b1;
-              uart_regs_n[TX_DATA] = DBG_END;
-              NS = CMD_FINISH;
-            end
+          if(cmd_q[7] && !cmd_q[6]) begin // We wanted to read data, so write it back
+            dbg_data_n = data_r;
+            NS = DATA_WRITE;
+          end else begin // notify that the command was executed
+            NS = CMD_DONE;
           end
         end
       end
 
       DATA_WRITE: begin
-        // wait for ack
-        if(uart_regs_q[CTRL][RX_FULL]) begin
-          uart_regs_n[CTRL][RX_FULL] = 1'b0;
-          uart_regs_n[RX_DATA] = 'b0;
-          // write data
-          if(!uart_regs_q[CTRL][TX_FULL]) begin
-            uart_regs_n[CTRL][TX_EN] = 1'b1;
-            uart_regs_n[CTRL][TX_FULL] = 1'b1;
-            uart_regs_n[TX_DATA] = DBG_END;
-            NS = CMD_FINISH;
+        if(!tx_full) begin
+          if(!data_cnt[2]) begin
+            case(data_cnt[1:0])
+              2'b00: uart_regs_n[TX_DATA] = {24'b0, dbg_data_q[7:0]};
+              2'b01: uart_regs_n[TX_DATA] = {24'b0, dbg_data_q[15:8]};
+              2'b10: uart_regs_n[TX_DATA] = {24'b0, dbg_data_q[23:16]};
+              2'b11: uart_regs_n[TX_DATA] = {24'b0, dbg_data_q[31:24]};
+            endcase          
+            tx_fifo_write_n = 1'b1;
+            incr_cnt = 1'b1;
           end
+        end
+        if(data_cnt == 3'b100)
+          NS = CMD_DONE;
+        else begin
         end
       end
 
-      CMD_FINISH: begin
-        // wait for ack
-        if(uart_regs_q[CTRL][RX_FULL]) begin
-          uart_regs_n[CTRL][RX_FULL] = 1'b0;
-          uart_regs_n[RX_DATA] = 'b0;
+      CMD_DONE: begin
+        rst_cnt = 1'b1;
+        if(!tx_full) begin
+          uart_regs_n[TX_DATA] = {24'b0, DBG_END};
+          tx_fifo_write_n = 1'b1;
+          // Go to next state
           NS = IDLE;
-        end        
+        end
       end
 
       default: begin end
@@ -291,12 +294,21 @@ begin
     uart_regs_q[RX_DATA] <= uart_regs_n[RX_DATA];
     uart_regs_q[STATUS]  <= uart_regs_n[STATUS];
 
+    // FIFO
+    rx_fifo_write_q <= rx_fifo_write_n;
+    tx_fifo_write_q <= tx_fifo_write_n;
+
     // DBG CTRL
     CS <= NS;
-      
+    dbg_data_q <= dbg_data_n;
     cmd_q <= cmd_n;
     addr_q <= addr_n;
     data_w_q <= data_w_n;
+
+    if(rst_cnt)
+      data_cnt <= 'b0;
+    else if(incr_cnt)
+      data_cnt <= data_cnt + 1;
   end
 end
 
@@ -308,7 +320,7 @@ fifo #(
     .ALMOST_EN  ( 0         )
 ) rx_fifo (
     .clk_i      ( clk               ),
-    .rstn_i     ( rstn              ),
+    .rstn_i     ( rstn_i            ),
     .din_i      ( rx_data           ),
     .we_i       ( rx_fifo_write_q   ),
     .re_i       ( rx_fifo_read      ),
@@ -325,7 +337,7 @@ fifo #(
     .ALMOST_EN  ( 0         )
 ) tx_fifo (
     .clk_i      ( clk                     ),
-    .rstn_i     ( rstn                    ),
+    .rstn_i     ( rstn_i                  ),
     .din_i      ( uart_regs_q[TX_DATA][7:0]),
     .we_i       ( tx_fifo_write_q         ),
     .re_i       ( tx_fifo_read            ),
